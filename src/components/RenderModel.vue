@@ -27,8 +27,6 @@ const MATERIAL_CONFIG = {
     color: 0xffffff,
     specular: 0x888888, // 增强高光反射
     shininess: 300, // 提升光泽度
-    // 新增环境光吸收系数
-    envMapIntensity: 1.5,
   }),
   upper: new THREE.MeshPhongMaterial({
     // color: 0xffb8b8,// 浅
@@ -109,13 +107,78 @@ const loadModels = async () => {
     ])
     // await loadTextures()
     // 优化牙齿加载循环
-    for (let i = 3; i <= 30; i++) {
+/*    for (let i = 3; i <= 30; i++) {
       const geometry = await loader.loadAsync(`/models/Tooth_${i}.stl`)
       const mesh = new THREE.Mesh(geometry, teethMaterial) // 使用共享材质
       scene.add(mesh)
-    }
+    }*/
   } catch (error) {
     console.error('加载失败:', error) // 查看具体报错文件
+  }
+}
+const loadTeethModels = async () => {
+  const loader = new STLLoader()
+  const existingTeeth: number[] = []
+  const missingTeeth: number[] = []
+
+  // 创建并行加载任务
+  const loadTasks = []
+  for (let i = 3; i <= 30; i++) {
+    loadTasks.push(
+      (async (toothNumber: number) => {
+        try {
+          const geometry = await loader.loadAsync(`/models/Tooth_${toothNumber}.stl`)
+          return { success: true, geometry, toothNumber }
+        } catch (error) {
+          return { success: false, toothNumber }
+        }
+      })(i)
+    )
+  }
+
+  // 等待所有加载任务完成
+  const results = await Promise.all(loadTasks)
+
+  // 处理结果
+  results.forEach(({ success, geometry, toothNumber }) => {
+    if (success && geometry) {
+      const mesh = new THREE.Mesh(geometry, MATERIAL_CONFIG.teeth)
+      scene.add(mesh)
+      existingTeeth.push(toothNumber)
+    } else {
+      missingTeeth.push(toothNumber)
+    }
+  })
+
+  // 输出加载报告
+  console.groupCollapsed('[模型加载报告]')
+  console.log('✅ 成功加载牙齿:', existingTeeth.join(', '))
+  console.log('❌ 缺失牙齿编号:', missingTeeth.join(', '))
+  console.groupEnd()
+
+  // 可视化提示（可选）
+  if (missingTeeth.length > 0) {
+    const warning = document.createElement('div')
+    warning.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 15px;
+      background: #ffeb3b;
+      border-radius: 4px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    `
+    warning.innerHTML = `
+      <b>部分牙齿模型缺失：</b><br>
+      ${missingTeeth.join(', ')} 号牙齿未找到<br>
+      <small>检查 models 目录文件完整性</small>
+    `
+    document.body.appendChild(warning)
+
+    // 自动移除提示
+    setTimeout(() => {
+      document.body.removeChild(warning)
+    }, 10000)
   }
 }
 
@@ -147,6 +210,7 @@ onMounted(async () => {
 
   // 加载模型
   await loadModels()
+  await loadTeethModels()
 
   // 启动动画
   animate()
